@@ -137,7 +137,7 @@ weekdays = ["월", "화", "수", "목", "금", "토", "일"]
 # ══════════════════════════════════════════════════════════════════
 col_title, col_refresh = st.columns([6, 1])
 with col_title:
-    st.title("🏦 데일리 브리프")
+    st.title("🏦 DAILY UPDATE")
     st.caption(f"{weekdays[now.weekday()]}요일 {now.strftime('%Y-%m-%d %H:%M')} 기준 · 오늘 수집 완료 ✓  |  DAG: 🟢 fetch · 🟢 upsert · 🔴 gmail")
 with col_refresh:
     st.write("")  # 여백
@@ -178,11 +178,30 @@ rivals = df[
 if not rivals.empty:
     top_r = rivals.sort_values("intr_rate2", ascending=False).iloc[0]
     diff  = round(top_r["intr_rate2"] - woori_rate_12, 2)
-    st.error(
-        f"🚨 **{top_r['kor_co_nm']} — {top_r['fin_prdt_nm']}** 금리 우위 감지  |  "
-        f"연 **{top_r['intr_rate2']:.2f}%** (우리은행 대비 **+{diff:.2f}%p**)  |  "
-        f"12개월 예금 기준 초과 상품 {len(rivals)}개 감지 · 담당자 메일 발송 완료 ✉️"
-    )
+    
+    # 빨간색 배경의 커스텀 알림 배너 구성
+    with st.container():
+        # 배경색과 테두리를 위해 스타일을 약간 섞은 markdown 사용 (에러 박스 느낌)
+        st.markdown(f"""
+            <div style="background-color: #ffe9e9; padding: 20px; border-radius: 10px; border-left: 5px solid #ff4b4b;">
+                <div style="display: flex; align-items: center;">
+                    <div style="flex: 1.5; border-right: 1px solid #ffcccc; margin-right: 20px;">
+                        <h3 style="margin: 0; color: #ff4b4b; font-size: 20px;">
+                            🚨 {top_r['kor_co_nm']}<br><br>{top_r['fin_prdt_nm']} 금리 우위 감지
+                        </h3>
+                    </div>
+                    <div style="flex: 2; padding-left: 10px;">
+                        <div style="font-size: 20px; font-weight: bold; color: #31333F; margin-bottom: 5px;">
+                            연 {top_r['intr_rate2']:.2f}% (우리은행 대비 +{diff:.2f}%p)
+                        </div>
+                        <div style="font-size: 17px; color: #555;">
+                            12개월 예금 기준 초과 상품 {len(rivals)}개 감지 · 담당자 메일 발송 완료 ✉️
+                        </div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        st.write("") # 배너 아래 여백
 else:
     st.success("✅ 우리은행이 12개월 예금 기준 경쟁력을 유지하고 있습니다 — 타행 대비 금리 우위 유지 중")
 
