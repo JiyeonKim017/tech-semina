@@ -183,9 +183,9 @@ if not rivals.empty:
     with st.container():
         # 배경색과 테두리를 위해 스타일을 약간 섞은 markdown 사용 (에러 박스 느낌)
         st.markdown(f"""
-            <div style="background-color: #ffe9e9; padding: 20px; border-radius: 10px; border-left: 5px solid #ff4b4b;">
+            <div style="background-color: #ffe9e9; padding: 10px 15px; border-radius: 10px; border-left: 5px solid #ff4b4b;">
                 <div style="display: flex; align-items: center;">
-                    <div style="flex: 1.5; border-right: 1px solid #ffcccc; margin-right: 20px;">
+                    <div style="flex: 1.5; border-right: 1px solid #ffcccc; margin-right: 20px; padding-left: 10px;">
                         <h3 style="margin: 0; color: #ff4b4b; font-size: 20px;">
                             🚨 {top_r['kor_co_nm']}<br><br>{top_r['fin_prdt_nm']} 금리 우위 감지
                         </h3>
@@ -205,6 +205,7 @@ if not rivals.empty:
 else:
     st.success("✅ 우리은행이 12개월 예금 기준 경쟁력을 유지하고 있습니다 — 타행 대비 금리 우위 유지 중")
 
+st.write("")
 
 # ══════════════════════════════════════════════════════════════════
 # ③ KPI 카드
