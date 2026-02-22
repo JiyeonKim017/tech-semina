@@ -1,0 +1,26 @@
+tech_semina/
+.streamlit/secrets.toml
+__pycache__/
+.env
+
+# 보안 및 설정 파일
+.streamlit/secrets.toml
+.env
+
+# 파이썬 캐시 및 가상환경
+__pycache__/
+.venv/
+.vscode/
+
+# 데이터 수집 및 테스트용 임시 파일 (배포 시 불필요)
+db_checkcsv.csv
+check_db.py
+collector.py
+db.py
+setup_db.py
+test1.py
+app-css.py
+
+# (선택) 만약 DB 용량이 너무 크다면 제외해야 하지만, 
+# 현재는 서비스 구동을 위해 주석 처리하거나 적지 않습니다.
+# tech_semina.db  <- 이건 적지 마세요!
