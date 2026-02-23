@@ -303,7 +303,6 @@ styled_df = (
 
 st.dataframe(
     styled_df.style
-        .background_gradient(subset=["최대 금리차"], cmap="Blues")
         .format({"우리 기본금리": "{:.2f}%", "우리 최대금리": "{:.2f}%",
                  "타행 기본금리": "{:.2f}%", "타행 최대금리": "{:.2f}%",
                  "최대 금리차": "{:.2f}%"}),
