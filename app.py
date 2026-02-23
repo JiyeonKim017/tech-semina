@@ -61,8 +61,8 @@ st.markdown("""
 # ─────────────────────────────────────────
 @st.cache_data(ttl=300)
 def load_data():
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
+    supabase_url = st.secrets["SUPABASE_URL"]
+    supabase_key = st.secrets["SUPABASE_KEY"]
 
     supabase = create_client(supabase_url, supabase_key)
     response = supabase.rpc("get_better_than_woori_final", {}).execute()
