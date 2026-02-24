@@ -149,9 +149,9 @@ tabs = st.tabs([
 # ══════════════════════════════════════════
 with tabs[0]:
     st.markdown("### 🏠 종합 현황")
-    st.markdown('<div class="desc-box">우리은행보다 금리가 높은 타행 상품을 금리차 순으로 확인하고, 관심 상품을 선택하면 금리 변화 추이를 하단에서 확인할 수 있습니다.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="desc-box">우리은행보다 금리가 높은 타행 상품을 금리차 순으로 확인합니다. 각 상품을 클릭하면 기간별 금리 변동 추이를 확인할 수 있습니다.</div>', unsafe_allow_html=True)
 
-    # 핵심 지표
+    # ── 핵심 지표 ──
     c1, c2, c3, c4, c5 = st.columns(5)
     for col, (label, value, sub) in zip([c1,c2,c3,c4,c5], [
         ("총 경쟁 상품",  f"{len(fdf)}개",                          "우리은행보다 금리 높은 상품"),
@@ -165,125 +165,117 @@ with tabs[0]:
 
     st.markdown("")
 
-    # 금리차 높은 순 테이블
-    st.markdown('<div class="section-title">📋 우리은행보다 금리가 높은 타행 상품 (금리차 순)</div>', unsafe_allow_html=True)
-
-    table_df = fdf_sorted[[
-        COL["bank"], COL["bank_prod"], COL["period"],
-        COL["woori_max"], COL["bank_max"], COL["rate_diff"], COL["difficulty"]
-    ]].copy()
-    table_df.columns = ["타행명", "타행 상품명", "기간(월)", "우리 최대금리(%)", "타행 최대금리(%)", "금리차(%p)", "우대난이도"]
-
-    # 위험도 컬럼 추가
-    def risk_label(row):
-        if row["금리차(%p)"] >= 0.3 and row["우대난이도"] <= 0.2:
-            return "🔴 고위험"
-        elif row["금리차(%p)"] >= 0.15:
-            return "🟡 주의"
-        else:
-            return "⚪ 모니터링"
-
-    table_df.insert(0, "위험도", table_df.apply(risk_label, axis=1))
-
-    st.dataframe(
-        table_df.style.format({
-            "우리 최대금리(%)": "{:.2f}%",
-            "타행 최대금리(%)": "{:.2f}%",
-            "금리차(%p)": "+{:.2f}%p",
-            "우대난이도": "{:.2f}",
-        }),
-        use_container_width=True,
-        height=320,
+    # ── 상품명 기준 중복 제거: 금리차 가장 높은 기간 대표값으로 ──
+    dedup_df = (
+        fdf.sort_values(COL["rate_diff"], ascending=False)
+        .drop_duplicates(subset=[COL["bank"], COL["bank_prod"]], keep="first")
+        .reset_index(drop=True)
     )
 
+    # ── 세션 상태: 전체 보기 토글 ──
+    if "show_all_products" not in st.session_state:
+        st.session_state["show_all_products"] = False
+
+    TOP_N = 5
+    display_list = dedup_df if st.session_state["show_all_products"] else dedup_df.head(TOP_N)
+
+    st.markdown('<div class="section-title">📋 금리차 높은 순 상품 랭킹</div>', unsafe_allow_html=True)
+
+    # ── 색상 팔레트 (기간별 멀티라인용) ──
+    PERIOD_COLORS = {
+        1:  "#bfdbfe",
+        3:  "#60a5fa",
+        6:  "#3b82f6",
+        12: "#1d4ed8",
+        24: "#1e3a8a",
+        36: "#172554",
+    }
+
+    for i, (_, row) in enumerate(display_list.iterrows()):
+        bank_nm   = row[COL["bank"]]
+        prod_nm   = row[COL["bank_prod"]]
+        bank_max  = row[COL["bank_max"]]
+        rate_diff = row[COL["rate_diff"]]
+        rank      = i + 1
+
+        label = f"**{rank}위** · {bank_nm}  |  {prod_nm}  |  최고금리 **{bank_max:.2f}%**  |  금리차 **+{rate_diff:.2f}%p**"
+
+        with st.expander(label, expanded=False):
+            if hist_df.empty:
+                st.info("추이 데이터를 불러올 수 없습니다.")
+            else:
+                # 해당 상품의 모든 기간 데이터 가져오기
+                prod_hist = hist_df[
+                    (hist_df["kor_co_nm"] == bank_nm) &
+                    (hist_df["fin_prdt_nm"] == prod_nm)
+                ].copy()
+
+                if prod_hist.empty:
+                    st.info("해당 상품의 금리 추이 데이터가 없습니다.")
+                else:
+                    available_periods = sorted(prod_hist["save_trm"].dropna().unique().tolist())
+
+                    # ── 기간별 멀티라인 금리 변동 그래프 ──
+                    fig_exp = go.Figure()
+                    for trm in available_periods:
+                        trm_df = prod_hist[prod_hist["save_trm"] == trm].sort_values("collected_at")
+                        color  = PERIOD_COLORS.get(int(trm), "#64748b")
+                        fig_exp.add_trace(go.Scatter(
+                            x=trm_df["collected_at"],
+                            y=trm_df["intr_rate2"],
+                            mode="lines+markers",
+                            name=f"{int(trm)}개월",
+                            line=dict(color=color, width=2),
+                            marker=dict(size=5),
+                        ))
+
+                    fig_exp.update_layout(
+                        plot_bgcolor="white", paper_bgcolor="white",
+                        legend=dict(orientation="h", y=1.12, x=1, xanchor="right", title_text="저축기간"),
+                        yaxis=dict(ticksuffix="%", gridcolor="#f1f5f9", title="최대금리 (%)"),
+                        xaxis=dict(title="수집 날짜", gridcolor="#f1f5f9"),
+                        margin=dict(l=10, r=10, t=30, b=10),
+                        height=340,
+                        title=dict(text=f"{bank_nm} · {prod_nm} — 기간별 최대금리 추이", font=dict(size=13), x=0),
+                    )
+                    st.plotly_chart(fig_exp, use_container_width=True)
+
+                    # ── 결과 요약 (st 기본 문법) ──
+                    st.divider()
+
+                    sum_cols = st.columns(len(available_periods))
+                    for ci, trm in enumerate(available_periods):
+                        trm_df = prod_hist[prod_hist["save_trm"] == trm].sort_values("collected_at")
+                        if trm_df.empty:
+                            continue
+                        first_r  = trm_df["intr_rate2"].iloc[0]
+                        latest_r = trm_df["intr_rate2"].iloc[-1]
+                        delta    = latest_r - first_r
+                        with sum_cols[ci]:
+                            st.metric(
+                                label=f"{int(trm)}개월",
+                                value=f"{latest_r:.2f}%",
+                                delta=f"{delta:+.2f}%p",
+                            )
+
+                    # 데이터 수집 기간
+                    date_min = prod_hist["collected_at"].min().strftime("%Y-%m-%d")
+                    date_max = prod_hist["collected_at"].max().strftime("%Y-%m-%d")
+                    st.caption(f"📅 수집 기간: {date_min} ~ {date_max}  |  비교 기간 수: {len(available_periods)}개")
+
     st.markdown("")
-    st.markdown('<div class="section-title">🔍 상품 선택 후 금리 변화 그래프 확인</div>', unsafe_allow_html=True)
 
-    # 상품 선택 selectbox
-    col_sel1, col_sel2, col_sel3 = st.columns(3)
-    with col_sel1:
-        all_banks = sorted(fdf[COL["bank"]].dropna().unique().tolist())
-        # 우리은행도 추가 (추이 비교용)
-        all_banks_hist = []
-        if not hist_df.empty:
-            all_banks_hist = sorted(hist_df["kor_co_nm"].dropna().unique().tolist())
-        sel_bank_comp = st.selectbox("은행 선택", all_banks_hist if all_banks_hist else all_banks, key="comp_bank")
-
-    with col_sel2:
-        if not hist_df.empty:
-            prods = sorted(hist_df[hist_df["kor_co_nm"] == sel_bank_comp]["fin_prdt_nm"].dropna().unique().tolist())
+    # ── 전체 보기 / 접기 버튼 ──
+    if len(dedup_df) > TOP_N:
+        remaining = len(dedup_df) - TOP_N
+        if not st.session_state["show_all_products"]:
+            if st.button(f"📂 전체 보기 (나머지 {remaining}개 더 보기)"):
+                st.session_state["show_all_products"] = True
+                st.rerun()
         else:
-            prods = []
-        sel_prod_comp = st.selectbox("상품 선택", prods, key="comp_prod")
-
-    with col_sel3:
-        if not hist_df.empty and sel_prod_comp:
-            trms = sorted(hist_df[
-                (hist_df["kor_co_nm"] == sel_bank_comp) &
-                (hist_df["fin_prdt_nm"] == sel_prod_comp)
-            ]["save_trm"].dropna().unique().tolist())
-        else:
-            trms = []
-        sel_trm_comp = st.selectbox("저축 기간(개월)", trms, key="comp_trm")
-
-    if not hist_df.empty and sel_prod_comp and sel_trm_comp:
-        trend_df_comp = hist_df[
-            (hist_df["kor_co_nm"] == sel_bank_comp) &
-            (hist_df["fin_prdt_nm"] == sel_prod_comp) &
-            (hist_df["save_trm"] == sel_trm_comp)
-        ].sort_values("collected_at").reset_index(drop=True)
-
-        if trend_df_comp.empty:
-            st.info("해당 조건의 데이터가 없습니다.")
-        else:
-            trend_df_comp["base_changed"] = trend_df_comp["intr_rate"].diff().ne(0)
-            trend_df_comp["max_changed"]  = trend_df_comp["intr_rate2"].diff().ne(0)
-            trend_df_comp["any_changed"]  = trend_df_comp["base_changed"] | trend_df_comp["max_changed"]
-            changed_comp = trend_df_comp[trend_df_comp["any_changed"] & (trend_df_comp.index > 0)]
-
-            fig_comp = go.Figure()
-            fig_comp.add_trace(go.Scatter(
-                x=trend_df_comp["collected_at"], y=trend_df_comp["intr_rate"],
-                mode="lines+markers", name="기본금리",
-                line=dict(color="#93c5fd", width=2), marker=dict(size=5),
-            ))
-            fig_comp.add_trace(go.Scatter(
-                x=trend_df_comp["collected_at"], y=trend_df_comp["intr_rate2"],
-                mode="lines+markers", name="최대금리",
-                line=dict(color="#1d4ed8", width=2.5), marker=dict(size=5),
-            ))
-            if len(changed_comp) > 0:
-                fig_comp.add_trace(go.Scatter(
-                    x=changed_comp["collected_at"], y=changed_comp["intr_rate2"],
-                    mode="markers", name="금리 변동 시점",
-                    marker=dict(color="#ef4444", size=12, symbol="star"),
-                ))
-            fig_comp.update_layout(
-                plot_bgcolor="white", paper_bgcolor="white",
-                legend=dict(orientation="h", y=1.1, x=1, xanchor="right"),
-                yaxis=dict(ticksuffix="%", gridcolor="#f1f5f9", title="금리 (%)"),
-                xaxis=dict(title="수집 날짜", gridcolor="#f1f5f9"),
-                margin=dict(l=10,r=10,t=30,b=10), height=380,
-            )
-            st.plotly_chart(fig_comp, use_container_width=True)
-
-            first_max  = trend_df_comp["intr_rate2"].iloc[0]
-            latest_max = trend_df_comp["intr_rate2"].iloc[-1]
-            rate_delta = latest_max - first_max
-            direction  = "상승" if rate_delta > 0 else ("하락" if rate_delta < 0 else "변동 없음")
-            date_range = f"{trend_df_comp['collected_at'].min().strftime('%Y-%m-%d')} ~ {trend_df_comp['collected_at'].max().strftime('%Y-%m-%d')}"
-
-            st.markdown(f"""
-            <div class="insight-box">
-                📌 <b>결과 요약</b><br>
-                <b>{sel_bank_comp} · {sel_prod_comp} ({sel_trm_comp}개월)</b><br>
-                조회 기간: <b>{date_range}</b> (총 {len(trend_df_comp)}일 수집)<br>
-                최대금리: <b>{first_max:.2f}%</b> → <b>{latest_max:.2f}%</b>
-                (<b>{'+' if rate_delta >= 0 else ''}{rate_delta:.2f}%p {direction}</b>)<br>
-                금리 변동 횟수: <b>{len(changed_comp)}회</b>
-                {"· ⚠️ 최근 금리가 상승 중이므로 경쟁력 모니터링이 필요합니다." if rate_delta > 0 else ""}
-            </div>
-            """, unsafe_allow_html=True)
+            if st.button("🔼 접기 (상위 5개만 보기)"):
+                st.session_state["show_all_products"] = False
+                st.rerun()
 
 # ══════════════════════════════════════════
 # TAB 2: 경쟁 구조
@@ -412,7 +404,8 @@ with tabs[2]:
                     max_diff  = curr["intr_rate2"] - prev["intr_rate2"]
 
                     change_rows.append({
-                        "변동 날짜":       curr["collected_at"].strftime("%Y-%m-%d"),
+                        "기준일 (이전)":    prev["collected_at"].strftime("%Y-%m-%d"),
+                        "변동일 (현재)":    curr["collected_at"].strftime("%Y-%m-%d"),
                         "기본금리 이전(%)": f"{prev['intr_rate']:.2f}%",
                         "기본금리 현재(%)": f"{curr['intr_rate']:.2f}%",
                         "기본금리 변동":    f"{'+' if base_diff >= 0 else ''}{base_diff:.2f}%p",
