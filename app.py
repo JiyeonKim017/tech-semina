@@ -152,13 +152,12 @@ with tabs[0]:
     st.markdown('<div class="desc-box">우리은행보다 금리가 높은 타행 상품을 금리차 순으로 확인합니다. 각 상품을 클릭하면 기간별 금리 변동 추이를 확인할 수 있습니다.</div>', unsafe_allow_html=True)
 
     # ── 핵심 지표 ──
-    c1, c2, c3, c4, c5 = st.columns(5)
-    for col, (label, value, sub) in zip([c1,c2,c3,c4,c5], [
-        ("총 경쟁 상품",  f"{len(fdf)}개",                          "우리은행보다 금리 높은 상품"),
-        ("평균 금리차",   f"{fdf[COL['rate_diff']].mean():.2f}%p", "타행 최대 - 우리 최대"),
-        ("최대 금리차",   f"{max_diff:.2f}%p",                      max_row[COL['bank']] if max_row is not None else "-"),
-        ("고위험 상품",   f"{high_risk}개",                         "금리차 0.3%p 이상"),
-        ("비교 타행 수",  f"{fdf[COL['bank']].nunique()}개",        "은행"),
+    c1, c2, c3, c4 = st.columns(4)
+    for col, (label, value, sub) in zip([c1,c2,c3,c4], [
+        ("총 경쟁 상품",  f"{len(fdf)}개",         "우리은행보다 금리 높은 상품"),
+        ("최대 금리차",   f"{max_diff:.2f}%p",      max_row[COL['bank']] if max_row is not None else "-"),
+        ("고위험 상품",   f"{high_risk}개",         "금리차 0.3%p 이상"),
+        ("비교 타행 수",  f"{fdf[COL['bank']].nunique()}개", "은행"),
     ]):
         with col:
             st.markdown(f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div><div class="metric-sub">{sub}</div></div>', unsafe_allow_html=True)
