@@ -228,10 +228,19 @@ with tabs[0]:
                             marker=dict(size=5),
                         ))
 
+                    # Y축 여유 계산
+                    all_rates = prod_hist["intr_rate2"].dropna()
+                    y_min = all_rates.min()
+                    y_max = all_rates.max()
+                    y_pad = (y_max - y_min) * 0.15 if y_max != y_min else 0.1
+
                     fig_exp.update_layout(
                         plot_bgcolor="white", paper_bgcolor="white",
                         legend=dict(orientation="h", y=1.12, x=1, xanchor="right", title_text="저축기간"),
-                        yaxis=dict(ticksuffix="%", gridcolor="#f1f5f9", title="최대금리 (%)"),
+                        yaxis=dict(
+                            ticksuffix="%", gridcolor="#f1f5f9", title="최대금리 (%)",
+                            range=[y_min - y_pad, y_max + y_pad],
+                        ),
                         xaxis=dict(title="수집 날짜", gridcolor="#f1f5f9"),
                         margin=dict(l=10, r=10, t=30, b=10),
                         height=340,
