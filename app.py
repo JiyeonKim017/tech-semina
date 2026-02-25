@@ -164,10 +164,27 @@ with tabs[0]:
 
     st.markdown("")
 
-    # ── 상품명 기준 중복 제거: 금리차 가장 높은 기간 대표값으로 ──
+    import re
+
+    def strip_deposit_type(name):
+        """상품명에서 (자유적립식) / (정액적립식) 등 괄호 패턴 제거"""
+        return re.sub(r"\s*\(자유적립식\)|\s*\(정액적립식\)", "", name).strip()
+
+    def get_deposit_type(name):
+        """적립 방식 추출: 자유 / 정액 / 일반"""
+        if "자유적립식" in name:
+            return "자유"
+        elif "정액적립식" in name:
+            return "정액"
+        return "일반"
+
+    # ── 상품명 기준 중복 제거: 괄호 제거 후 금리차 가장 높은 기간 대표값으로 ──
+    fdf_dedup = fdf.copy()
+    fdf_dedup["_clean_prod"] = fdf_dedup[COL["bank_prod"]].apply(strip_deposit_type)
+
     dedup_df = (
-        fdf.sort_values(COL["rate_diff"], ascending=False)
-        .drop_duplicates(subset=[COL["bank"], COL["bank_prod"]], keep="first")
+        fdf_dedup.sort_values(COL["rate_diff"], ascending=False)
+        .drop_duplicates(subset=[COL["bank"], "_clean_prod"], keep="first")
         .reset_index(drop=True)
     )
 
@@ -180,8 +197,9 @@ with tabs[0]:
 
     st.markdown('<div class="section-title">📋 금리차 높은 순 상품 랭킹</div>', unsafe_allow_html=True)
 
-    # ── 색상 팔레트 (기간별 멀티라인용) ──
-    PERIOD_COLORS = {
+    # ── 색상 팔레트 ──
+    # 자유적립식 or 일반: 파랑 계열 실선
+    BLUE_COLORS = {
         1:  "#bfdbfe",
         3:  "#60a5fa",
         6:  "#3b82f6",
@@ -189,13 +207,23 @@ with tabs[0]:
         24: "#1e3a8a",
         36: "#172554",
     }
+    # 정액적립식: 초록 계열 점선
+    GREEN_COLORS = {
+        1:  "#bbf7d0",
+        3:  "#4ade80",
+        6:  "#22c55e",
+        12: "#16a34a",
+        24: "#15803d",
+        36: "#14532d",
+    }
 
     for i, (_, row) in enumerate(display_list.iterrows()):
-        bank_nm   = row[COL["bank"]]
-        prod_nm   = row[COL["bank_prod"]]
-        bank_max  = row[COL["bank_max"]]
-        rate_diff = row[COL["rate_diff"]]
-        rank      = i + 1
+        bank_nm    = row[COL["bank"]]
+        prod_nm_raw = row[COL["bank_prod"]]
+        prod_nm    = strip_deposit_type(prod_nm_raw)   # 헤더엔 괄호 제거한 이름
+        bank_max   = row[COL["bank_max"]]
+        rate_diff  = row[COL["rate_diff"]]
+        rank       = i + 1
 
         label = f"**{rank}위** · {bank_nm}  |  {prod_nm}  |  최고금리 **{bank_max:.2f}%**  |  금리차 **+{rate_diff:.2f}%p**"
 
@@ -203,47 +231,57 @@ with tabs[0]:
             if hist_df.empty:
                 st.info("추이 데이터를 불러올 수 없습니다.")
             else:
-                # 해당 상품의 모든 기간 데이터 가져오기
+                # 괄호 포함된 원래 이름들 전부 매칭 (자유/정액 둘 다 포함)
                 prod_hist = hist_df[
                     (hist_df["kor_co_nm"] == bank_nm) &
-                    (hist_df["fin_prdt_nm"] == prod_nm)
+                    (hist_df["fin_prdt_nm"].apply(strip_deposit_type) == prod_nm)
                 ].copy()
+                prod_hist["_deposit_type"] = prod_hist["fin_prdt_nm"].apply(get_deposit_type)
 
                 if prod_hist.empty:
                     st.info("해당 상품의 금리 추이 데이터가 없습니다.")
                 else:
                     available_periods = sorted(prod_hist["save_trm"].dropna().unique().tolist())
+                    deposit_types     = sorted(prod_hist["_deposit_type"].unique().tolist())
 
-                    # ── 기간별 멀티라인 금리 변동 그래프 ──
+                    # ── 기간 × 적립방식 멀티라인 그래프 ──
                     fig_exp = go.Figure()
-                    for trm in available_periods:
-                        trm_df = prod_hist[prod_hist["save_trm"] == trm].sort_values("collected_at")
-                        color  = PERIOD_COLORS.get(int(trm), "#64748b")
-                        fig_exp.add_trace(go.Scatter(
-                            x=trm_df["collected_at"],
-                            y=trm_df["intr_rate2"],
-                            mode="lines+markers",
-                            name=f"{int(trm)}개월",
-                            line=dict(color=color, width=2),
-                            marker=dict(size=5),
-                        ))
+                    for dtype in deposit_types:
+                        dtype_df = prod_hist[prod_hist["_deposit_type"] == dtype]
+                        color_map  = GREEN_COLORS if dtype == "정액" else BLUE_COLORS
+                        line_dash  = "dot" if dtype == "정액" else "solid"
+                        type_label = f" ({dtype})" if len(deposit_types) > 1 else ""
 
-                    # Y축 여유 계산
+                        for trm in available_periods:
+                            trm_df = dtype_df[dtype_df["save_trm"] == trm].sort_values("collected_at")
+                            if trm_df.empty:
+                                continue
+                            color = color_map.get(int(trm), "#64748b")
+                            fig_exp.add_trace(go.Scatter(
+                                x=trm_df["collected_at"],
+                                y=trm_df["intr_rate2"],
+                                mode="lines+markers",
+                                name=f"{int(trm)}개월{type_label}",
+                                line=dict(color=color, width=2, dash=line_dash),
+                                marker=dict(size=5),
+                            ))
+
+                    # Y축 여유 계산 (25%로 확대 — 범례 공간 확보)
                     all_rates = prod_hist["intr_rate2"].dropna()
                     y_min = all_rates.min()
                     y_max = all_rates.max()
-                    y_pad = (y_max - y_min) * 0.15 if y_max != y_min else 0.1
+                    y_pad = (y_max - y_min) * 0.25 if y_max != y_min else 0.15
 
                     fig_exp.update_layout(
                         plot_bgcolor="white", paper_bgcolor="white",
-                        legend=dict(orientation="h", y=1.12, x=1, xanchor="right", title_text="저축기간"),
+                        legend=dict(orientation="h", y=1.18, x=1, xanchor="right", title_text="기간 · 방식"),
                         yaxis=dict(
                             ticksuffix="%", gridcolor="#f1f5f9", title="최대금리 (%)",
                             range=[y_min - y_pad, y_max + y_pad],
                         ),
                         xaxis=dict(title="수집 날짜", gridcolor="#f1f5f9"),
-                        margin=dict(l=10, r=10, t=30, b=10),
-                        height=340,
+                        margin=dict(l=10, r=10, t=40, b=10),
+                        height=360,
                         title=dict(text=f"{bank_nm} · {prod_nm} — 기간별 최대금리 추이", font=dict(size=13), x=0),
                     )
                     st.plotly_chart(fig_exp, use_container_width=True)
@@ -251,17 +289,26 @@ with tabs[0]:
                     # ── 결과 요약 (st 기본 문법) ──
                     st.divider()
 
-                    sum_cols = st.columns(len(available_periods))
-                    for ci, trm in enumerate(available_periods):
-                        trm_df = prod_hist[prod_hist["save_trm"] == trm].sort_values("collected_at")
-                        if trm_df.empty:
-                            continue
+                    # 적립방식 × 기간 조합으로 컬럼 구성
+                    summary_items = []
+                    for dtype in deposit_types:
+                        for trm in available_periods:
+                            trm_df = prod_hist[
+                                (prod_hist["_deposit_type"] == dtype) &
+                                (prod_hist["save_trm"] == trm)
+                            ].sort_values("collected_at")
+                            if not trm_df.empty:
+                                summary_items.append((dtype, trm, trm_df))
+
+                    sum_cols = st.columns(len(summary_items)) if summary_items else st.columns(1)
+                    for ci, (dtype, trm, trm_df) in enumerate(summary_items):
                         first_r  = trm_df["intr_rate2"].iloc[0]
                         latest_r = trm_df["intr_rate2"].iloc[-1]
                         delta    = latest_r - first_r
+                        type_label = f" ({dtype})" if len(deposit_types) > 1 else ""
                         with sum_cols[ci]:
                             st.metric(
-                                label=f"{int(trm)}개월",
+                                label=f"{int(trm)}개월{type_label}",
                                 value=f"{latest_r:.2f}%",
                                 delta=f"{delta:+.2f}%p",
                             )
@@ -269,7 +316,8 @@ with tabs[0]:
                     # 데이터 수집 기간
                     date_min = prod_hist["collected_at"].min().strftime("%Y-%m-%d")
                     date_max = prod_hist["collected_at"].max().strftime("%Y-%m-%d")
-                    st.caption(f"📅 수집 기간: {date_min} ~ {date_max}  |  비교 기간 수: {len(available_periods)}개")
+                    deposit_label = " · ".join([f"{d}적립식" if d != "일반" else "일반" for d in deposit_types])
+                    st.caption(f"📅 수집 기간: {date_min} ~ {date_max}  |  기간 수: {len(available_periods)}개  |  적립 방식: {deposit_label}")
 
     st.markdown("")
 
