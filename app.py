@@ -319,17 +319,26 @@ with tabs[0]:
                         delta    = latest_r - first_r
                         type_label = f" ({dtype})" if len(deposit_types) > 1 else ""
                         with sum_cols[ci]:
-                            st.metric(
-                                label=f"{int(trm)}개월{type_label}",
-                                value=f"{latest_r:.2f}%",
-                                delta=f"{delta:+.2f}%p",
-                            )
+                            # delta가 0이면 None으로 넘기고 회색 텍스트로 별도 표시
+                            if delta == 0:
+                                st.metric(
+                                    label=f"{int(trm)}개월{type_label}",
+                                    value=f"{latest_r:.2f}%",
+                                    delta=None,
+                                )
+                                st.caption("변동 없음")
+                            else:
+                                st.metric(
+                                    label=f"{int(trm)}개월{type_label}",
+                                    value=f"{latest_r:.2f}%",
+                                    delta=f"{delta:+.2f}%p",
+                                )
 
                     # 데이터 수집 기간
                     date_min = prod_hist["collected_at"].min().strftime("%Y-%m-%d")
                     date_max = prod_hist["collected_at"].max().strftime("%Y-%m-%d")
                     deposit_label = " · ".join([f"{d}적립식" if d != "일반" else "일반" for d in deposit_types])
-                    st.caption(f"📅 수집 기간: {date_min} ~ {date_max}  |  기간 수: {len(available_periods)}개  |  적립 방식: {deposit_label}")
+                    st.caption(f"📅 수집 기간: {date_min} ~ {date_max}  |  적립 방식: {deposit_label}")
 
     st.markdown("")
 
