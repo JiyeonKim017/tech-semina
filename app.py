@@ -91,8 +91,7 @@ COL = {
     "bank_base":  df.columns[7],
     "bank_max":   df.columns[8],
     "rate_diff":  df.columns[9],
-    "difficulty": df.columns[10],
-    "benefit":    df.columns[11],
+    "benefit":    df.columns[10],
 }
 
 # ─────────────────────────────────────────
@@ -524,7 +523,7 @@ with tabs[3]:
     rename_map = {v: k for v, k in zip(display_cols, [
         "상품타입", "우리은행상품", "저축기간(월)", "타행명", "타행상품명",
         "우리 기본금리", "우리 최대금리", "타행 기본금리", "타행 최대금리",
-        "금리차(%p)", "우대난이도", "우대조건"
+        "금리차(%p)", "우대조건"
     ])}
     styled_df = (
         fdf[display_cols].rename(columns=rename_map)
