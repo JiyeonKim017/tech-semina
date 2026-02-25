@@ -56,7 +56,7 @@ supabase = get_supabase()
 # ─────────────────────────────────────────
 @st.cache_data(ttl=300)
 def load_comparison_data():
-    response = supabase.rpc("get_better_than_woori_final", {}).execute()
+    response = supabase.rpc("get_new_better_products_v3", {}).execute()
     return pd.DataFrame(response.data)
 
 @st.cache_data(ttl=300)
