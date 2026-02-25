@@ -62,7 +62,7 @@ def load_comparison_data():
 @st.cache_data(ttl=300)
 def load_history_data():
     response = supabase.table("finance_data").select(
-        "collected_at, kor_co_nm, fin_prdt_nm, save_trm, intr_rate, intr_rate2, spcl_cnd, product_type"
+        "collected_at, kor_co_nm, fin_prdt_nm, save_trm, intr_rate, intr_rate2, spcl_cnd, product_type, rsrv_type_nm"
     ).execute()
     df = pd.DataFrame(response.data)
     df["collected_at"] = pd.to_datetime(df["collected_at"])
@@ -170,11 +170,23 @@ with tabs[0]:
         """상품명에서 (자유적립식) / (정액적립식) 등 괄호 패턴 제거"""
         return re.sub(r"\s*\(자유적립식\)|\s*\(정액적립식\)", "", name).strip()
 
-    def get_deposit_type(name):
-        """적립 방식 추출: 자유 / 정액 / 일반"""
-        if "자유적립식" in name:
+    def get_deposit_type(row):
+        """적립 방식 추출 — 2가지 케이스 모두 처리
+        케이스 A: fin_prdt_nm에 괄호로 포함된 경우
+        케이스 B: rsrv_type_nm 별도 컬럼에 있는 경우
+        """
+        # 1순위: rsrv_type_nm 컬럼 (케이스 B)
+        rsrv = row.get("rsrv_type_nm", None)
+        if pd.notna(rsrv) and rsrv:
+            if "자유" in str(rsrv):
+                return "자유"
+            elif "정액" in str(rsrv):
+                return "정액"
+        # 2순위: 상품명 괄호 파싱 (케이스 A)
+        nm = str(row.get("fin_prdt_nm", ""))
+        if "자유적립식" in nm:
             return "자유"
-        elif "정액적립식" in name:
+        elif "정액적립식" in nm:
             return "정액"
         return "일반"
 
@@ -236,7 +248,7 @@ with tabs[0]:
                     (hist_df["kor_co_nm"] == bank_nm) &
                     (hist_df["fin_prdt_nm"].apply(strip_deposit_type) == prod_nm)
                 ].copy()
-                prod_hist["_deposit_type"] = prod_hist["fin_prdt_nm"].apply(get_deposit_type)
+                prod_hist["_deposit_type"] = prod_hist.apply(get_deposit_type, axis=1)
 
                 if prod_hist.empty:
                     st.info("해당 상품의 금리 추이 데이터가 없습니다.")
